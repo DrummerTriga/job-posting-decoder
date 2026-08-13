@@ -1,36 +1,104 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🔍 Job Posting Decoder
 
-## Getting Started
+> Cut through the corporate speak. Paste a job posting, get the truth.
 
-First, run the development server:
+Powered by **Claude Sonnet** — this tool strips away buzzwords, spots red flags, and gives you an honest read on what a company is actually asking for.
+
+---
+
+## What it does
+
+Paste any job posting and get back a structured analysis:
+
+| Signal | What you get |
+|---|---|
+| 🛠 **Technologies Required** | Every tech stack item mentioned, clearly listed |
+| 📊 **Seniority (Advertised vs. Real)** | What they say vs. what they actually want |
+| 🚩 **Red Flags** | Toxic culture patterns & unrealistic expectations, explained |
+| 💬 **Buzzwords Detected** | Ninja, rockstar, fast-paced — called out |
+
+---
+
+## Stack
+
+- **[Next.js 16](https://nextjs.org)** — App Router + API routes
+- **[Anthropic SDK](https://github.com/anthropic-ai/anthropic-sdk-typescript)** — Claude Sonnet 4.5 for analysis
+- **[TypeScript](https://www.typescriptlang.org)** — Full type safety
+- **[Tailwind CSS v4](https://tailwindcss.com)** — Dark UI styling
+
+---
+
+## Getting started
+
+### 1. Clone the repo
+
+```bash
+git clone https://github.com/DrummerTriga/job-posting-decoder.git
+cd job-posting-decoder
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Set up your API key
+
+Create a `.env.local` file at the root:
+
+```env
+ANTHROPIC_API_KEY=your_anthropic_api_key_here
+```
+
+> Get your API key at [console.anthropic.com](https://console.anthropic.com)
+
+### 4. Run the dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) — paste a job posting and hit **Analyze**.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How it works
 
-## Learn More
+```
+User pastes job posting
+        ↓
+POST /api/decode
+        ↓
+Claude Sonnet analyzes the text
+        ↓
+Returns structured JSON with technologies,
+seniority estimate, red flags & buzzwords
+        ↓
+Rendered in a clean dark UI
+```
 
-To learn more about Next.js, take a look at the following resources:
+The prompt instructs Claude to return **pure JSON only** — no markdown, no preamble — parsed directly on the server and forwarded to the client.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project structure
 
-## Deploy on Vercel
+```
+├── app/
+│   ├── page.tsx          # Main UI — textarea + results
+│   ├── layout.tsx        # Root layout
+│   ├── globals.css       # Global styles
+│   └── api/
+│       └── decode/
+│           └── route.ts  # POST handler → Anthropic SDK
+├── public/
+├── package.json
+└── .env.local            # Your API key (not committed)
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## License
+
+MIT
