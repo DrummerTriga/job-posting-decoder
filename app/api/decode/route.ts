@@ -1,3 +1,5 @@
+
+import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { NextRequest, NextResponse } from "next/server";
 
@@ -7,14 +9,29 @@ const anthropic = new Anthropic({
 })
 
 export const POST = async (req: NextRequest) => {
-
     try { 
         const {jobPosting} = await req.json()
+
         if (!jobPosting || jobPosting.trim().length < 20) {
             return NextResponse.json(
                 { error: "Please paste the complete text of the job posting"},
                 { status: 400}
             )
+        }
+
+        const supabase = await createClient()
+
+        // Checking which user is it:
+        const { 
+            data: { user },
+             } = await supabase.auth.getUser()
+        
+        // blocking the request if there is no User.
+        if (!user) {
+            return NextResponse.json(
+                { error: "You must be logged in." },
+                { status: 401 }
+             );
         }
 
         const message = await anthropic.messages.create({
@@ -41,8 +58,31 @@ export const POST = async (req: NextRequest) => {
         
         const parsed = JSON.parse(responseText)
 
-        return NextResponse.json(parsed)
-    } catch (error) {
+        const { data: savedAnalysis, error: dbError } = await supabase
+            .from("job_analyses")
+            .insert({
+                user_id: user.id,
+                raw_job_text: jobPosting,
+                technologies_required: parsed.technologies_required,
+                seniority_advertised: parsed.seniority_advertised,
+                seniority_estimated_real: parsed.seniority_estimated_real,
+                red_flags: parsed.red_flags,
+                buzzwords_detected: parsed.buzzwords_detected,
+            })
+            .select()
+            .single()
+
+        if (dbError) {
+            console.log("Error saving to database: ", dbError)
+            return NextResponse.json(
+                {error: "Analysis succeeded but failed to save. Try again."},
+                { status: 500 }
+            )
+        }
+
+        return NextResponse.json(savedAnalysis)
+
+        } catch (error) {
         console.log("Error while processing the job position: ", error)
         return NextResponse.json(
             { error: "Error while analysing the position. Please try again." },
