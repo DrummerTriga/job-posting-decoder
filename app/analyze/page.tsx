@@ -10,7 +10,7 @@ type DecodedJob = {
   buzzwords_detected: string[];
 };
 
-export default function Home() {
+export default function Analyze() {
   const [jobPosting, setJobPosting] = useState("");
   const [result, setResult] = useState<DecodedJob | null>(null);
   const [loading, setLoading] = useState(false);
