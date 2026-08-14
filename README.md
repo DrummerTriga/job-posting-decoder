@@ -2,7 +2,7 @@
 
 > Cut through the corporate speak. Paste a job posting, get the truth.
 
-Powered by **Claude Sonnet** — this tool strips away buzzwords, spots red flags, and gives you an honest read on what a company is actually asking for.
+Powered by **Claude Sonnet** — this tool strips away buzzwords, spots red flags, and gives you an honest read on what a company is actually asking for. Analyses are saved to your account so you can revisit and categorize them later.
 
 ---
 
@@ -17,12 +17,19 @@ Paste any job posting and get back a structured analysis:
 | 🚩 **Red Flags** | Toxic culture patterns & unrealistic expectations, explained |
 | 💬 **Buzzwords Detected** | Ninja, rockstar, fast-paced — called out |
 
+Each analysis is **persisted to your account** and shown in the dashboard, where you can tag it as:
+
+- ✅ **Apply!** — worth pursuing
+- 🚩 **Red Flag!** — stay away
+- ❌ **Not for me** — not the right fit
+
 ---
 
 ## Stack
 
 - **[Next.js 16](https://nextjs.org)** — App Router + API routes
-- **[Anthropic SDK](https://github.com/anthropic-ai/anthropic-sdk-typescript)** — Claude Sonnet 4.5 for analysis
+- **[Anthropic SDK](https://github.com/anthropic-ai/anthropic-sdk-typescript)** — Claude Sonnet for analysis
+- **[Supabase](https://supabase.com)** — Auth (email/password) + Postgres database
 - **[TypeScript](https://www.typescriptlang.org)** — Full type safety
 - **[Tailwind CSS v4](https://tailwindcss.com)** — Dark UI styling
 
@@ -43,42 +50,76 @@ cd job-posting-decoder
 npm install
 ```
 
-### 3. Set up your API key
+### 3. Set up environment variables
 
 Create a `.env.local` file at the root:
 
 ```env
 ANTHROPIC_API_KEY=your_anthropic_api_key_here
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-> Get your API key at [console.anthropic.com](https://console.anthropic.com)
+> - Anthropic API key → [console.anthropic.com](https://console.anthropic.com)
+> - Supabase credentials → [supabase.com/dashboard](https://supabase.com/dashboard)
 
-### 4. Run the dev server
+### 4. Set up the database
+
+In your Supabase project, create the following table:
+
+```sql
+create table job_analyses (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users not null,
+  raw_job_text text not null,
+  technologies_required text[] default '{}',
+  seniority_advertised text,
+  seniority_estimated_real text,
+  red_flags text[] default '{}',
+  buzzwords_detected text[] default '{}',
+  category text check (category in ('apply', 'red_flag', 'not_for_me')),
+  created_at timestamptz default now()
+);
+```
+
+Enable **Row Level Security** and add a policy so users can only access their own rows:
+
+```sql
+alter table job_analyses enable row level security;
+
+create policy "Users can manage their own analyses"
+  on job_analyses
+  for all
+  using (auth.uid() = user_id);
+```
+
+### 5. Run the dev server
 
 ```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) — paste a job posting and hit **Analyze**.
+Open [http://localhost:3000](http://localhost:3000), create an account, and start decoding.
 
 ---
 
 ## How it works
 
 ```
-User pastes job posting
+User signs up / logs in (Supabase Auth)
         ↓
-POST /api/decode
+Paste job posting → POST /api/decode
         ↓
 Claude Sonnet analyzes the text
         ↓
-Returns structured JSON with technologies,
-seniority estimate, red flags & buzzwords
+Returns structured JSON → saved to Supabase (job_analyses)
         ↓
-Rendered in a clean dark UI
+Dashboard lists all past analyses
+        ↓
+User tags each analysis: Apply / Red Flag / Not for me
+        ↓
+PATCH /api/jobs/[id]/category updates the record
 ```
-
-The prompt instructs Claude to return **pure JSON only** — no markdown, no preamble — parsed directly on the server and forwarded to the client.
 
 ---
 
@@ -86,16 +127,52 @@ The prompt instructs Claude to return **pure JSON only** — no markdown, no pre
 
 ```
 ├── app/
-│   ├── page.tsx          # Main UI — textarea + results
-│   ├── layout.tsx        # Root layout
-│   ├── globals.css       # Global styles
+│   ├── page.tsx                        # Root redirect
+│   ├── layout.tsx                      # Root layout
+│   ├── globals.css                     # Global styles
+│   ├── login/                          # Login page
+│   ├── signup/                         # Signup page
+│   ├── analyze/
+│   │   └── page.tsx                    # Paste & analyze a job posting
+│   ├── dashboard/
+│   │   └── page.tsx                    # History of all analyses
 │   └── api/
-│       └── decode/
-│           └── route.ts  # POST handler → Anthropic SDK
-├── public/
-├── package.json
-└── .env.local            # Your API key (not committed)
+│       ├── decode/
+│       │   └── route.ts                # POST → Anthropic SDK → save to DB
+│       └── jobs/[id]/
+│           └── category/
+│               └── route.ts            # PATCH → update category
+├── components/
+│   ├── JobCard.tsx                     # Dashboard card with category actions
+│   └── LogoutButton.tsx                # Auth logout
+├── lib/
+│   └── supabase/                       # Supabase client helpers (server + client)
+├── middleware.ts                       # Route protection (auth guard)
+└── .env.local                          # Your secrets (not committed)
 ```
+
+---
+
+## Auth & route protection
+
+Routes `/analyze` and `/dashboard` are protected by `middleware.ts`. Unauthenticated requests are redirected to `/login`. Session management is handled via `@supabase/ssr` with cookie-based tokens.
+
+---
+
+## Current state
+
+This is an intermediate phase of the project. Core features are working end-to-end:
+
+- [x] Auth (signup, login, logout)
+- [x] Job posting analysis via Claude
+- [x] Analyses saved per user in Supabase
+- [x] Dashboard with history
+- [x] Category tagging (Apply / Red Flag / Not for me)
+
+Still to come:
+- [ ] Full detail view per analysis
+- [ ] Filtering and sorting in the dashboard
+- [ ] UI polish pass
 
 ---
 
