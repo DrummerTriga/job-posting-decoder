@@ -29,7 +29,8 @@ Each analysis is **persisted to your account** and shown in the dashboard, where
 
 - **[Next.js 16](https://nextjs.org)** — App Router + API routes
 - **[Anthropic SDK](https://github.com/anthropic-ai/anthropic-sdk-typescript)** — Claude Sonnet for analysis
-- **[Supabase](https://supabase.com)** — Auth (email/password) + Postgres database
+- **[Supabase](https://supabase.com)** — Auth (email/password) + Postgres + Storage
+- **[pdf-parse](https://www.npmjs.com/package/pdf-parse)** — Server-side PDF text extraction
 - **[TypeScript](https://www.typescriptlang.org)** — Full type safety
 - **[Tailwind CSS v4](https://tailwindcss.com)** — Dark UI styling
 
@@ -65,7 +66,7 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
 
 ### 4. Set up the database
 
-In your Supabase project, create the following table:
+In your Supabase project, create the following tables:
 
 ```sql
 create table job_analyses (
@@ -80,17 +81,40 @@ create table job_analyses (
   category text check (category in ('apply', 'red_flag', 'not_for_me')),
   created_at timestamptz default now()
 );
+
+create table cvs (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references auth.users not null unique,
+  file_path text not null,
+  extracted_text text not null,
+  created_at timestamptz default now()
+);
 ```
 
-Enable **Row Level Security** and add a policy so users can only access their own rows:
+Enable **Row Level Security** on both tables:
 
 ```sql
 alter table job_analyses enable row level security;
 
 create policy "Users can manage their own analyses"
-  on job_analyses
-  for all
+  on job_analyses for all
   using (auth.uid() = user_id);
+
+alter table cvs enable row level security;
+
+create policy "Users can manage their own CV"
+  on cvs for all
+  using (auth.uid() = user_id);
+```
+
+Create a **Storage bucket** named `cvs` (private) for the raw PDF files:
+
+```sql
+-- In Supabase dashboard: Storage → New bucket → name: "cvs", public: false
+-- Then add a storage policy:
+create policy "Users can manage their own CV files"
+  on storage.objects for all
+  using (bucket_id = 'cvs' and auth.uid()::text = (storage.foldername(name))[1]);
 ```
 
 ### 5. Run the dev server
@@ -108,13 +132,20 @@ Open [http://localhost:3000](http://localhost:3000), create an account, and star
 ```
 User signs up / logs in (Supabase Auth)
         ↓
-Paste job posting → POST /api/decode
+[Profile] Upload CV (PDF) → POST /api/cv/upload
+        ↓
+pdf-parse extracts raw text server-side
+        ↓
+PDF stored in Supabase Storage (bucket: cvs)
+Extracted text + file path saved to cvs table
+        ↓
+[Analyze] Paste job posting → POST /api/decode
         ↓
 Claude Sonnet analyzes the text
         ↓
 Returns structured JSON → saved to Supabase (job_analyses)
         ↓
-Dashboard lists all past analyses
+[Dashboard] Lists all past analyses
         ↓
 User tags each analysis: Apply / Red Flag / Not for me
         ↓
@@ -132,6 +163,8 @@ PATCH /api/jobs/[id]/category updates the record
 │   ├── globals.css                     # Global styles
 │   ├── login/                          # Login page
 │   ├── signup/                         # Signup page
+│   ├── profile/
+│   │   └── page.tsx                    # CV upload page
 │   ├── analyze/
 │   │   └── page.tsx                    # Paste & analyze a job posting
 │   ├── dashboard/
@@ -139,6 +172,9 @@ PATCH /api/jobs/[id]/category updates the record
 │   └── api/
 │       ├── decode/
 │       │   └── route.ts                # POST → Anthropic SDK → save to DB
+│       ├── cv/
+│       │   └── upload/
+│       │       └── route.ts            # POST → pdf-parse → Supabase Storage + DB
 │       └── jobs/[id]/
 │           └── category/
 │               └── route.ts            # PATCH → update category
@@ -155,7 +191,7 @@ PATCH /api/jobs/[id]/category updates the record
 
 ## Auth & route protection
 
-Routes `/analyze` and `/dashboard` are protected by `middleware.ts`. Unauthenticated requests are redirected to `/login`. Session management is handled via `@supabase/ssr` with cookie-based tokens.
+Routes `/analyze`, `/dashboard`, and `/profile` are protected by `middleware.ts`. Unauthenticated requests are redirected to `/login`. Session management is handled via `@supabase/ssr` with cookie-based tokens.
 
 ---
 
@@ -168,8 +204,10 @@ This is an intermediate phase of the project. Core features are working end-to-e
 - [x] Analyses saved per user in Supabase
 - [x] Dashboard with history
 - [x] Category tagging (Apply / Red Flag / Not for me)
+- [x] CV upload — PDF parsed server-side, stored in Supabase Storage, text extracted and saved
 
 Still to come:
+- [ ] Use CV text in the analysis prompt (match against job requirements)
 - [ ] Full detail view per analysis
 - [ ] Filtering and sorting in the dashboard
 - [ ] UI polish pass
