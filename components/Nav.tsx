@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import LogoutButton from "./LogoutButton";
@@ -27,9 +28,10 @@ export default function Nav({ userEmail }: { userEmail: string | null }) {
       <nav className="max-w-5xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
         <Link
           href="/"
-          className="font-semibold text-neutral-100 shrink-0 hover:text-white"
+          className="flex items-center gap-2 font-semibold text-neutral-100 shrink-0 hover:text-white"
         >
-          🔍 Job Posting Decoder
+          <Image src="/favicon.ico" alt="Job Posting Decoder" width={20} height={20} className="shrink-0" />
+          Job Posting Decoder
         </Link>
 
         {/* Desktop */}
