@@ -1,6 +1,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { MODEL } from "@/lib/model";
 import { NextRequest, NextResponse } from "next/server";
 
 
@@ -35,12 +36,17 @@ export const POST = async (req: NextRequest) => {
         }
 
         const message = await anthropic.messages.create({
-            model: "claude-sonnet-4-6",
+            model: MODEL,
             max_tokens: 1024,
             messages: [
                 {
                 role: "user",
-                content: `Analyse this open position and return ONLY a valid JSON (without markdown,  \`\`\`, no text before or after) with this exact structure:
+                content: `Analyse this open position and answer in exactly two parts.
+
+                        Your answer shall always start with a title about this position, for example: "Full Stack Developer at ADOBE". If you dont see the
+                        company name, try to create a title based on the position. Keep it to a single short line, with no quotes and no label.
+
+                        Then leave one blank line and return ONLY a valid JSON (without markdown,  \`\`\`, no text after) with this exact structure:
                         {
                         "technologies_required": ["array of the mentioned technologies"],
                         "seniority_advertised": "What the position says, ex: Senior",
@@ -55,14 +61,37 @@ export const POST = async (req: NextRequest) => {
         
         const responseText = 
             message.content[0].type === "text" ? message.content[0].text: "";
-        
-        const parsed = JSON.parse(responseText)
+
+        // Claude answers with a one-line title, then the JSON. Split the two so
+        // the JSON still parses, and keep the title as the first line of
+        // raw_job_text — there is no separate column for it.
+        const jsonStart = responseText.indexOf("{")
+        const jsonEnd = responseText.lastIndexOf("}")
+
+        // Only the first real line is the title — ignore a code fence if Claude
+        // adds one despite being asked not to.
+        const title =
+            jsonStart > 0
+                ? (responseText
+                      .slice(0, jsonStart)
+                      .split("\n")
+                      .map((line) => line.trim())
+                      .find((line) => line && !line.startsWith("\`\`\`")) ?? "")
+                      .replace(/^["'#\s-]+|["'\s]+$/g, "")
+                : ""
+
+        const parsed = JSON.parse(
+            jsonStart >= 0 ? responseText.slice(jsonStart, jsonEnd + 1) : responseText
+        )
+
+        // Falls back to the pasted text alone if Claude skipped the title.
+        const rawJobText = title ? `${title}\n\n${jobPosting}` : jobPosting
 
         const { data: savedAnalysis, error: dbError } = await supabase
             .from("job_analyses")
             .insert({
                 user_id: user.id,
-                raw_job_text: jobPosting,
+                raw_job_text: rawJobText,
                 technologies_required: parsed.technologies_required,
                 seniority_advertised: parsed.seniority_advertised,
                 seniority_estimated_real: parsed.seniority_estimated_real,

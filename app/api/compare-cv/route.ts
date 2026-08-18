@@ -1,6 +1,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import Anthropic from "@anthropic-ai/sdk";
+import { MODEL } from "@/lib/model";
 import { NextRequest, NextResponse } from "next/server";
 
 
@@ -63,9 +64,29 @@ export const POST = async (req: NextRequest) => {
             );
         }
 
+        const { data: existingComparison } = await supabase
+            .from("cv_comparisons")
+            .select("*")
+            .eq("job_analysis_id", jobAnalysisId)
+            .eq("cv_id", cv.id)
+            .single();
+
+        if (existingComparison) {
+            const parsedAnalysis = JSON.parse(existingComparison.analysis_text);
+            return NextResponse.json({
+                id: existingComparison.id,
+                match_score: existingComparison.match_score,
+                matching_skills: parsedAnalysis.matching_skills,
+                missing_skills: parsedAnalysis.missing_skills,
+                overall_assessment: parsedAnalysis.overall_assessment,
+                cached: true,
+            });
+        }
+
         const message = await anthropic.messages.create({
-            model: "claude-sonnet-4-6",
+            model: MODEL,
             max_tokens: 1500,
+            temperature: 0,
             messages: [
                 {
                 role: "user",
