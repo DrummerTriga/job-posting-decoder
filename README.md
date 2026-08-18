@@ -6,6 +6,16 @@ Powered by **Claude Sonnet** — this tool strips away buzzwords, spots red flag
 
 ---
 
+## 📖 Why I built this
+
+This project started as a hands-on way to learn full-stack development with the Claude API — going beyond tutorials and into something with real moving parts. Specifically, I wanted to get comfortable with the **Anthropic SDK** (structured outputs, prompt design for both extraction and comparison tasks), **Supabase** (Postgres, Auth, Storage, and Row-Level Security as a way to enforce data isolation at the database level rather than just in application code), and server-side file handling in **Next.js** (file uploads, PDF parsing, and the client/server split in the App Router).
+
+It's also a genuinely useful tool I use myself while job hunting, which made the learning process more concrete: every feature exists because it solved an actual problem I ran into (e.g., wanting to track which jobs I'd already reviewed, or checking how well my CV actually matches a posting before applying).
+
+Building it end-to-end — including debugging real production issues like PDF worker configuration and Storage RLS policies — taught me more than any isolated tutorial would have.
+
+---
+
 ## What it does
 
 Paste any job posting and get back a structured analysis:
@@ -16,12 +26,12 @@ Paste any job posting and get back a structured analysis:
 | 📊 **Seniority (Advertised vs. Real)** | What they say vs. what they actually want |
 | 🚩 **Red Flags** | Toxic culture patterns & unrealistic expectations, explained |
 | 💬 **Buzzwords Detected** | Ninja, rockstar, fast-paced — called out |
+| 🎯 **CV Match** | Score 0–100, matching skills, missing skills, honest assessment |
 
-Each analysis is **persisted to your account** and shown in the dashboard, where you can tag it as:
+Each analysis is **persisted to your account** and shown in the dashboard, where you can:
 
-- ✅ **Apply!** — worth pursuing
-- 🚩 **Red Flag!** — stay away
-- ❌ **Not for me** — not the right fit
+- Tag it: ✅ **Apply!** / 🚩 **Red Flag!** / ❌ **Not for me**
+- Compare it against your uploaded CV and get an instant fit score
 
 ---
 
@@ -89,6 +99,15 @@ create table cvs (
   extracted_text text not null,
   created_at timestamptz default now()
 );
+
+create table cv_comparisons (
+  id uuid primary key default gen_random_uuid(),
+  job_analysis_id uuid references job_analyses not null,
+  cv_id uuid references cvs not null,
+  match_score integer not null,
+  analysis_text jsonb not null,
+  created_at timestamptz default now()
+);
 ```
 
 Enable **Row Level Security** on both tables:
@@ -105,6 +124,18 @@ alter table cvs enable row level security;
 create policy "Users can manage their own CV"
   on cvs for all
   using (auth.uid() = user_id);
+
+alter table cv_comparisons enable row level security;
+
+create policy "Users can manage their own comparisons"
+  on cv_comparisons for all
+  using (
+    exists (
+      select 1 from job_analyses
+      where job_analyses.id = cv_comparisons.job_analysis_id
+        and job_analyses.user_id = auth.uid()
+    )
+  );
 ```
 
 Create a **Storage bucket** named `cvs` (private) for the raw PDF files:
@@ -150,6 +181,13 @@ Returns structured JSON → saved to Supabase (job_analyses)
 User tags each analysis: Apply / Red Flag / Not for me
         ↓
 PATCH /api/jobs/[id]/category updates the record
+        ↓
+[Optional] Click "Compare with my CV" on any card
+        ↓
+POST /api/compare-cv → Claude compares CV text vs. job posting
+        ↓
+Returns match score, matching skills, missing skills, assessment
+        → saved to cv_comparisons table
 ```
 
 ---
@@ -175,11 +213,14 @@ PATCH /api/jobs/[id]/category updates the record
 │       ├── cv/
 │       │   └── upload/
 │       │       └── route.ts            # POST → pdf-parse → Supabase Storage + DB
+│       ├── compare-cv/
+│       │   └── route.ts                # POST → Claude compares CV vs. job → save to DB
 │       └── jobs/[id]/
 │           └── category/
 │               └── route.ts            # PATCH → update category
 ├── components/
-│   ├── JobCard.tsx                     # Dashboard card with category actions
+│   ├── JobCard.tsx                     # Dashboard card with category actions + CV compare
+│   ├── CompareCvButton.tsx             # Inline CV comparison UI with score + skill breakdown
 │   └── LogoutButton.tsx                # Auth logout
 ├── lib/
 │   └── supabase/                       # Supabase client helpers (server + client)
@@ -205,9 +246,9 @@ This is an intermediate phase of the project. Core features are working end-to-e
 - [x] Dashboard with history
 - [x] Category tagging (Apply / Red Flag / Not for me)
 - [x] CV upload — PDF parsed server-side, stored in Supabase Storage, text extracted and saved
+- [x] CV vs. job comparison — match score, matching/missing skills, overall assessment via Claude
 
 Still to come:
-- [ ] Use CV text in the analysis prompt (match against job requirements)
 - [ ] Full detail view per analysis
 - [ ] Filtering and sorting in the dashboard
 - [ ] UI polish pass

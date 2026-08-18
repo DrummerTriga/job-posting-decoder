@@ -39,16 +39,16 @@ export const POST = async (req: NextRequest) => {
             max_tokens: 1024,
             messages: [
                 {
-          role: "user",
-          content: `Analyse this open position and return ONLY a valid JSON (without markdown,  \`\`\`, no text before or after) with this exact structure:
-                {
-                "technologies_required": ["array of the mentioned technologies"],
-                "seniority_advertised": "What the position says, ex: Senior",
-                "seniority_estimated_real": "my honest estimate based on the described requirements",
-                "red_flags": ["phrases or patterns that suggest a toxic culture or unrealistic expectations, with a brief explanation of each"],
-                "buzzwords_detected": ["empty words like ninja, rockstar, fast-paced, work hard play hard"]
-                }
-                Job Position: ${jobPosting}`,
+                role: "user",
+                content: `Analyse this open position and return ONLY a valid JSON (without markdown,  \`\`\`, no text before or after) with this exact structure:
+                        {
+                        "technologies_required": ["array of the mentioned technologies"],
+                        "seniority_advertised": "What the position says, ex: Senior",
+                        "seniority_estimated_real": "my honest estimate based on the described requirements",
+                        "red_flags": ["phrases or patterns that suggest a toxic culture or unrealistic expectations, with a brief explanation of each"],
+                        "buzzwords_detected": ["empty words like ninja, rockstar, fast-paced, work hard play hard"]
+                        }
+                        Job Position: ${jobPosting}`,
                 }
             ]
         })

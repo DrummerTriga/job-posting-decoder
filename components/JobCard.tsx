@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react";
+import CompareCvButton from "./CompareCvButton";
 
 type JobAnalysis = {
   id: string;
@@ -95,6 +96,7 @@ export default function JobCard({ job }: { job: JobAnalysis }) {
           Not for me!
         </button>
       </div>
+      <CompareCvButton jobId={job.id} />
     </div>
   );
 }
